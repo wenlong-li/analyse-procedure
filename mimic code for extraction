@@ -1,0 +1,145 @@
+--This analyse codes partly referenced the MIMIC database sql repository. Someone who used the codes should load the MIMIC database sql repository fristly.
+--Then, variables picked out were more than actual use in finall article. We filterd variables with mass of missing data, such as lactate, bicarbonate, NT-proBNP, hemoglobin and so on.
+
+DROP MATERIALIZED VIEW IF EXISTS k1 CASCADE;
+CREATE materialized VIEW k1 AS
+SELECT pvt.subject_id,pvt.hadm_id,pvt.charttime,pvt.valuenum,pvt.label_1,pvt.hospital_expire_flag
+
+FROM
+(SELECT lab.subject_id,lab.hadm_id,lab.charttime,lab.valuenum,m.hospital_expire_flag
+,CASE --WHEN itemid=51300 THEN 'wbc'
+      WHEN itemid=50820 THEN 'ph'
+		  WHEN itemid=50821 THEN 'po2'
+		  WHEN itemid=50818 THEN 'pco2'
+		  WHEN itemid=50813 THEN 'lactate' 
+		  WHEN itemid=50803 THEN 'bicarbonate' 
+		  WHEN itemid=50963 THEN 'NT-proBNP' 
+		  WHEN itemid=50811 THEN 'hemoglobin' 
+		  WHEN itemid=51265 THEN 'platelet' 
+		  WHEN itemid=50912 THEN 'creatinine' 
+		  WHEN itemid=51006 THEN 'bun' 
+		  WHEN itemid=50861 THEN 'ALT' 
+		  WHEN itemid=50878 THEN 'AST' 
+		 ELSE NULL END AS label_1
+		 FROM labevents lab 
+		 RIGHT JOIN (SELECT hospital_expire_flag,x.hadm_id,x.subject_id FROM admissions a RIGHT JOIN (SELECT icd9_code,hadm_id,subject_id FROM diagnoses_icd  WHERE icd9_code='32723')x USING(hadm_id) )m USING(hadm_id) WHERE lab.valuenum IS not NULL 
+		 )pvt WHERE pvt.label_1 is not NULL
+
+DROP MATERIALIZED VIEW IF EXISTS k1_1 CASCADE;
+CREATE materialized VIEW k1_1 AS
+SELECT * FROM k1 LEFT JOIN (SELECT subject_id,hadm_id,intime,los FROM icustays)x USING (subject_id,hadm_id) WHERE charttime BETWEEN intime AND intime + interval '3' DAY
+		 
+DROP MATERIALIZED VIEW IF EXISTS k2 CASCADE;
+CREATE materialized VIEW k2 AS
+SELECT pvt.subject_id,pvt.hadm_id,pvt.icustay_id,pvt.label_2,pvt.charttime,pvt.valuenum,pvt.icd9_code
+    
+FROM(SELECT ce.subject_id,ce.hadm_id,ce.icustay_id,ce.charttime,ce.valuenum,d.icd9_code
+    ,CASE 
+		 WHEN itemid=    220546      THEN 'wbc' 
+		 WHEN itemid=    220045      THEN 'hr' 
+     WHEN itemid IN (113,220074) THEN 'cvp'
+		 ELSE NULL END AS label_2
+	FROM chartevents ce RIGHT JOIN diagnoses_icd d USING (hadm_id) WHERE icd9_code='32723' AND ce.itemid IN(220546,220045,113,220074) AND ce.valuenum IS NOT NULL)pvt
+	
+DROP MATERIALIZED VIEW IF EXISTS k2_2 CASCADE;
+CREATE materialized VIEW k2_2 AS
+SELECT * FROM k2 LEFT JOIN (SELECT subject_id,hadm_id,intime,los FROM icustays)x USING (subject_id,hadm_id) WHERE charttime BETWEEN intime AND intime + interval '3' DAY
+
+ALTER TABLE k1_1 RENAME COLUMN valuenum TO valuenum_1 --更改列名
+ALTER TABLE k1_1 RENAME COLUMN los TO los_1
+ALTER TABLE k2_2 RENAME COLUMN valuenum TO valuenum_2--更改列名
+ALTER TABLE k2_2 RENAME COLUMN los TO los_2
+
+DROP MATERIALIZED VIEW IF EXISTS k3 CASCADE;
+CREATE materialized VIEW k3 AS
+SELECT subject_id,hadm_id,hospital_expire_flag,los_1
+, min(CASE WHEN label_1='ph'                     THEN valuenum_1 ELSE NULL END) AS PH_min
+, max(CASE WHEN label_1='ph'                     THEN valuenum_1 ELSE NULL END) AS PH_max
+, min(CASE WHEN label_1='po2'                    THEN valuenum_1 ELSE NULL END) AS po2_min
+, max(CASE WHEN label_1='po2'                    THEN valuenum_1 ELSE NULL END) AS po2_max
+, min(CASE WHEN label_1='pco2'                   THEN valuenum_1 ELSE NULL END) AS pco2_min
+, max(CASE WHEN label_1='pco2'                   THEN valuenum_1 ELSE NULL END) AS pco2_max
+, min(CASE WHEN label_1='lactate'                THEN valuenum_1 ELSE NULL END) AS lactate_min
+, max(CASE WHEN label_1='lactate'                THEN valuenum_1 ELSE NULL END) AS lactate_max
+, min(CASE WHEN label_1='bicarbonate'            THEN valuenum_1 ELSE NULL END) AS bicarbonate_min
+, max(CASE WHEN label_1='bicarbonate'            THEN valuenum_1 ELSE NULL END) AS bicarbonate_max
+, min(CASE WHEN label_1='NT-proBNP'              THEN valuenum_1 ELSE NULL END) AS NT_proBNP_min
+, max(CASE WHEN label_1='NT-proBNP'              THEN valuenum_1 ELSE NULL END) AS NT_proBNP_max
+, min(CASE WHEN label_1='hemoglobin'             THEN valuenum_1 ELSE NULL END) AS hemoglobin_min
+, max(CASE WHEN label_1='hemoglobin'             THEN valuenum_1 ELSE NULL END) AS hemoglobin_max
+, min(CASE WHEN label_1='platelet'               THEN valuenum_1 ELSE NULL END) AS platelet_min
+, max(CASE WHEN label_1='platelet'               THEN valuenum_1 ELSE NULL END) AS platelet_max
+, min(CASE WHEN label_1='creatinine'             THEN valuenum_1 ELSE NULL END) AS creatinine_min
+, max(CASE WHEN label_1='creatinine'             THEN valuenum_1 ELSE NULL END) AS creatinine_max
+, min(CASE WHEN label_1='bun'                    THEN valuenum_1 ELSE NULL END) AS bun_min
+, max(CASE WHEN label_1='bun'                    THEN valuenum_1 ELSE NULL END) AS bun_max
+, min(CASE WHEN label_1='ALT'                    THEN valuenum_1 ELSE NULL END) AS ALT_min
+, max(CASE WHEN label_1='ALT'                    THEN valuenum_1 ELSE NULL END) AS ALT_max
+, min(CASE WHEN label_1='AST'                    THEN valuenum_1 ELSE NULL END) AS AST_min
+, max(CASE WHEN label_1='AST'                    THEN valuenum_1 ELSE NULL END) AS AST_max
+FROM k1_1 GROUP BY subject_id,hadm_id,hospital_expire_flag,los_1
+
+
+DROP MATERIALIZED VIEW IF EXISTS k4 CASCADE;
+CREATE materialized VIEW k4 AS
+SELECT subject_id,hadm_id,icustay_id,los_2
+     ,min(CASE WHEN label_2='wbc' THEN valuenum_2 ELSE NULL END)AS wbc_min
+		 ,min(CASE WHEN label_2='wbc' THEN valuenum_2 ELSE NULL END)AS wbc_max
+     ,min(CASE WHEN label_2='hr'  THEN valuenum_2 ELSE NULL END)AS hr_min
+     ,max(CASE WHEN label_2='hr'  THEN valuenum_2 ELSE NULL END)AS hr_max
+		 ,min(CASE WHEN label_2='cvp' THEN valuenum_2 ELSE NULL END)AS cvp_min
+		 ,max(CASE WHEN label_2='cvp' THEN valuenum_2 ELSE NULL END)AS cvp_max
+FROM k2_2 GROUP BY subject_id,hadm_id,icustay_id,los_2
+
+
+DROP MATERIALIZED VIEW IF EXISTS k5 CASCADE;
+CREATE materialized VIEW k5 AS
+SELECT * FROM k3 INNER JOIN k4 USING(hadm_id,subject_id) 
+
+DROP MATERIALIZED VIEW IF EXISTS k6 CASCADE;
+CREATE materialized VIEW k6 AS
+SELECT hadm_id,insurance,marital_status,s.icustay_id,s.age,s.gender,s.ethnicity_grouped,s.admission_type,s.height,s.weight
+FROM admissions RIGHT JOIN
+(SELECT hadm_id,icustay_id,age,gender,ethnicity_grouped,admission_type,x.height,x.weight
+FROM icustay_detail RIGHT JOIN
+(SELECT icustay_id,height,weight FROM heightfirstday INNER JOIN weightfirstday USING (icustay_id) WHERE height is not NULL AND weight IS NOT NULL)x USING(icustay_id) )s USING (hadm_id) WHERE marital_status IS NOT NULL
+
+DROP MATERIALIZED VIEW IF EXISTS k7 CASCADE;
+CREATE materialized VIEW k7 AS
+SELECT * FROM k5 LEFT JOIN k6 USING(hadm_id,icustay_id)
+
+DROP MATERIALIZED VIEW IF EXISTS w1 CASCADE;
+CREATE materialized VIEW w1 AS
+SELECT hadm_id,sofa FROM sofa RIGHT JOIN k7 USING (hadm_id)
+
+DROP MATERIALIZED VIEW IF EXISTS w2 CASCADE;
+CREATE materialized VIEW w2 AS
+SELECT hadm_id,saps FROM saps RIGHT JOIN k7 USING (hadm_id)
+
+DROP MATERIALIZED VIEW IF EXISTS w3 CASCADE;
+CREATE materialized VIEW w3 AS
+SELECT hadm_id,elixhauser_sid30 FROM elixhauser_ahrq_score RIGHT JOIN k7 USING (hadm_id)
+
+DROP MATERIALIZED VIEW IF EXISTS w4 CASCADE;
+CREATE materialized VIEW w4 AS
+SELECT hadm_id,bpsys,bpdias FROM echodata RIGHT JOIN k7 USING (hadm_id)
+
+DROP MATERIALIZED VIEW IF EXISTS w5 CASCADE;
+CREATE materialized VIEW w5 AS
+SELECT icustay_id,duration_hours FROM ventdurations RIGHT JOIN k7 USING (icustay_id)
+
+DROP MATERIALIZED VIEW IF EXISTS w6 CASCADE;
+CREATE materialized VIEW w6 AS
+SELECT  FROM w4 INNER JOIN (SELECT * FROM w1 INNER JOIN (SELECT w2.hadm_id,w2.saps,w3.elixhauser_sid30 FROM w2 INNER JOIN w3 USING(hadm_id))x USING(hadm_id))s USING(hadm_id)
+
+DROP MATERIALIZED VIEW IF EXISTS w7 CASCADE;
+CREATE materialized VIEW w7 AS
+SELECT DISTINCT(hadm_id),sofa,saps,elixhauser_sid30,bpsys,bpdias FROM w6
+
+DROP MATERIALIZED VIEW IF EXISTS k8 CASCADE;
+CREATE materialized VIEW k8 AS
+SELECT * FROM k7 LEFT JOIN w7 USING (hadm_id)
+
+DROP MATERIALIZED VIEW IF EXISTS k9 CASCADE;
+CREATE materialized VIEW k9 AS
+SELECT * FROM k8 LEFT JOIN (SELECT DISTINCT (icustay_id),duration_hours FROM w5)x USING(icustay_id)
