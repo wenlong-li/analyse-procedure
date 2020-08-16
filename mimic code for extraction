@@ -1,5 +1,5 @@
---This analyse codes partly referenced the MIMIC database sql repository. Someone who used the codes should load the MIMIC database sql repository fristly.
---Then, variables picked out were more than actual use in finall article. We filterd variables with mass of missing data, such as lactate, bicarbonate, NT-proBNP, hemoglobin and so on.
+--This analyse codes partly referenced the MIMIC database sql repository. Someone who used the codes should load the MIMIC database sql repository firstly.
+--Then, variables picked out were more than actual use in final article. We filterred variables with mass of missing data, such as lactate, bicarbonate, NT-proBNP, hemoglobin and so on.
 
 DROP MATERIALIZED VIEW IF EXISTS k1 CASCADE;
 CREATE materialized VIEW k1 AS
