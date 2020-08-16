@@ -1,0 +1,303 @@
+--This should be open and execute in R language (version:4.0.2).
+
+data<-read.csv(file = 'c:/Users/microbes/Desktop/prediction model/predict the in-hospital death  among OSAHS patients/814 full data.csv',sep = ',',header = T)
+names(data)[2]<-'death'
+names(data)[3]<-'los'
+attach(data)
+data$ph<-(ph_min+ph_max)/2
+data$po2<-(po2_min+po2_max)/2
+data$pco2<-(pco2_min+pco2_max)/2
+data$cre<-(creatinine_min+creatinine_max)/2
+data$bun<-(bun_min+bun_max)/2
+data$wbc<-(wbc_min+wbc_max)/2
+data$hr<-(hr_min+hr_max)/2
+data1<-data[,c(2,3,18:35)]
+attach(data1)
+data1$bmi<-weight/(height/100)^2
+
+##将bmi保留2位小数点
+data1$bmi<-round(data1$bmi,digits = 2)  
+data1$los<-round(data1$los,2)
+data1$age<-round(data1$age,0)
+data1$ph<-round(data1$ph,2)
+data1$hr<-round(data1$hr,0)
+
+##将字符型变量转换为数值变量
+##性别，男性为1，女性为2
+data1$gender<-sub('M',1,data1$gender)
+data1$gender<-sub('F',2,data1$gender)
+data1$gender<-as.numeric(data1$gender)
+
+##保险类型，（government,medicaid,medicare）为1，(private,self pay)为2
+data1$insurance<-sub('Government',1,data1$insurance)
+data1$insurance<-sub('Medicaid',1,data1$insurance)
+data1$insurance<-sub('Medicare',1,data1$insurance)
+data1$insurance<-sub('Private',2,data1$insurance)
+data1$insurance<-sub('Self Pay',2,data1$insurance)
+data1$insurance<-as.numeric(data1$insurance)
+
+##婚姻状况
+data1$marital_status<-sub('MARRIED',1,data1$marital_status)
+data1$marital_status<-sub('SINGLE',2,data1$marital_status)
+data1$marital_status<-sub('DIVORCED',3,data1$marital_status)
+data1$marital_status<-sub('SEPARATED',3,data1$marital_status)
+data1$marital_status<-sub('UNKNOWN (DEFAULT)',3,data1$marital_status)
+data1$marital_status<-sub('WIDOWED',3,data1$marital_status)
+data1$marital_status<-as.numeric(data1$marital_status)
+data1[is.na(data1)]<-3
+##种族
+data1$ethnicity_grouped<-sub('white',1,data1$ethnicity_grouped)
+data1$ethnicity_grouped<-sub('asian',2,data1$ethnicity_grouped)
+data1$ethnicity_grouped<-sub('black',2,data1$ethnicity_grouped)
+data1$ethnicity_grouped<-sub('hispanic',2,data1$ethnicity_grouped)
+data1$ethnicity_grouped<-sub('other',2,data1$ethnicity_grouped)
+data1$ethnicity_grouped<-sub('unknown',2,data1$ethnicity_grouped)
+data1$ethnicity_grouped<-as.numeric(data1$ethnicity_grouped)
+
+##入院类型
+data1$admission_type<-sub('ELECTIVE',1,data1$admission_type)
+data1$admission_type<-sub('EMERGENCY',2,data1$admission_type)
+data1$admission_type<-sub('URGENT',2,data1$admission_type)
+data1$admission_type<-as.numeric(data1$admission_type)
+
+##导出筛清洗后的数据
+cleandata813<-data1[-536,c(-9,-10)]
+write.csv(cleandata813,file = 'cleandata_813.csv')
+
+cleandata813$insurance<-factor(cleandata813$insurance,
+                             levels = c(1,2))
+cleandata813$marital_status<-factor(cleandata813$marital_status,
+                                  levels = c(1,2,3))
+cleandata813$gender<-factor(cleandata813$gender,
+                          levels = c(1,2))
+cleandata813$ethnicity_grouped<-factor(cleandata813$ethnicity_grouped,
+                                     levels = c(1,2))
+cleandata813$admission_type<-factor(cleandata813$admission_type,
+                                  levels = c(1,2),labels = c('Elective','Emergency'))
+
+##更改列名
+#names(cleandata813)[1]<-'Death'
+#names(cleandata813)[8]<-'Admission type'
+#names(cleandata813)[9]<-'SOFA score'
+#names(cleandata813)[11]<-'Elixhauser score'
+#names(cleandata813)[17]<-'WBC'
+#names(cleandata813)[19]<-'BMI'
+
+
+library(car)
+##共线性诊断（用Car包），vif<10
+vif(glm(death~.,data = cleandata813,family = binomial(link = 'logit')))
+
+
+##caret包必须指定id进行拆分
+cleandata813$id<-c(1:813)
+
+##加载caret包，拆分训练集和测试集
+library(caret)
+
+set.seed(20200722) ##设置随机种子，并拆分训练集和验证集
+train_and_validation<-createDataPartition(y=cleandata813$id,
+                                          p=0.70,list = F)
+train<-cleandata813[train_and_validation,]
+validation<-cleandata813[-train_and_validation,]
+
+##univariable<-glm(death~los+insurance+marital_status+age+gender+ethnicity_grouped+admission_type+sofa+saps+
+##elixhauser_sid30+ph+po2+pco2+cre+bun+wbc+hr+bmi,data = cleandata813,family = binomial(link = 'logit'))
+
+##单因素分析
+los<-glm(death~los,data = train,family = binomial(link = 'logit'))
+insurance<-glm(death~insurance,data = train,family = binomial(link = 'logit'))
+marital_status<-glm(death~marital_status,data = train,family = binomial(link = 'logit'))
+age<-glm(death~age,data = train,family = binomial(link = 'logit'))
+gender<-glm(death~gender,data = train,family = binomial(link = 'logit'))
+ethnicity_grouped<-glm(death~ethnicity_grouped,data = train,family = binomial(link = 'logit'))
+admission_type<-glm(death~admission_type,data = train,family = binomial(link = 'logit'))
+sofa<-glm(death~sofa,data = train,family = binomial(link = 'logit'))
+saps<-glm(death~saps,data = train,family = binomial(link = 'logit'))
+elixhauser_sid30<-glm(death~elixhauser_sid30,data = train,family = binomial(link = 'logit'))
+ph<-glm(death~ph,data = train,family = binomial(link = 'logit'))
+po2<-glm(death~po2,data = train,family = binomial(link = 'logit'))
+pco2<-glm(death~pco2,data = train,family = binomial(link = 'logit'))
+cre<-glm(death~cre,data = train,family = binomial(link = 'logit'))
+bun<-glm(death~bun,data = train,family = binomial(link = 'logit'))
+wbc<-glm(death~wbc,data = train,family = binomial(link = 'logit'))
+hr<-glm(death~hr,data = train,family = binomial(link = 'logit'))
+bmi<-glm(death~bmi,data = train,family = binomial(link = 'logit'))
+
+##多因素分析
+multivariable<-glm(death~age+admission_type+sofa+saps+
+                   elixhauser_sid30+ph+cre+bun+wbc+bmi,data = train,family = binomial(link = 'logit'))
+##最终纳入拟合模型,拟合3个模型
+##elixhauser_sid30+临床参数模型
+fit<-glm(death~admission_type+sofa+elixhauser_sid30+wbc+bmi,data = train,family = binomial(link = 'logit'))
+##elixhauser_sid30单独模型
+fit_1<-glm(death~elixhauser_sid30,data = train,family = binomial(link = 'logit'))
+
+##临床参数单独模型
+fit_2<-glm(death~admission_type+sofa+wbc+bmi,data = train,family = binomial(link = 'logit'))
+
+library(pROC)
+library(rms)
+library(rmda)
+##训练集3个模型
+pre_train<-predict(newdata=train,fit,"response")
+model1<-roc(death~pre_train,data=train,smooth=F)
+plot(model1,print.auc=T,print.thres=T,legacy.axes=T,main = "ROC CURVE", col= "blue",print.thres.col="blue",identity.col="blue",
+     identity.lty=1,identity.lwd=1)
+
+pre_train_1<-predict(newdata=train,fit_1,"response")
+model1_1<-roc(death~pre_train_1,data=train,smooth=F)
+plot(model1_1,print.auc=T,print.thres=T,main = "ROC CURVE", col= "blue",print.thres.col="blue",identity.col="blue",
+     identity.lty=1,identity.lwd=1)
+
+pre_train_2<-predict(newdata=train,fit_2,"response")
+model1_2<-roc(death~pre_train_2,data=train,smooth=F)
+plot(model1_2,print.auc=T,print.thres=T,main = "ROC CURVE", col= "blue",print.thres.col="blue",identity.col="blue",
+     identity.lty=1,identity.lwd=1)
+
+roc.test(model1_2,model1_1)
+
+##训练集3个模型画1个图
+
+tiff(filename = 'train_roc.tiff',height = 2400,width = 2400,units = 'px',res = 600)
+plot.roc(train$death,pre_train_1,main = "Training Cohort",legacy.axes=T,col='gray',lwd=1,lty=1)
+lines.roc(train$death,pre_train_2,legacy.axes=T,col='orange',lwd=1,lty=1)
+lines.roc(train$death,pre_train,legacy.axes=T,col='red',lwd=1,lty=1)
+legend('bottomright',bty='n',legend = c('Model A AUC= 0.771','Model B AUC= 0.820','Model C AUC= 0.855'),cex = 0.5,pt.cex = 0.5,
+       col = c('gray','orange','red'),lwd=1,lty = c(1,1,1))
+dev.off()
+
+##绘制校准曲线
+cali_train<-calibrate(lrm(death~admission_type+sofa+elixhauser_sid30+wbc+bmi,data = train,x=T,y=T),method = 'boot',B = 1000)
+
+tiff(filename = 'cali_t_c.tiff',height = 2400,width = 3200,units = 'px',res = 600)
+plot(cali_train,xlab = 'Predicted probability',ylab = 'Actual Probability',xlim = c(0,1),ylim =c(0,1),subtitles=T,riskdist = T,cex.subtitles = 0.6)
+dev.off()
+
+cali_train_1<-calibrate(lrm(death~elixhauser_sid30,data = train,x=T,y=T),method = 'boot',B = 1000)
+
+tiff(filename = 'cali_t_a.tiff',height = 2400,width = 3200,units = 'px',res = 600)
+plot(cali_train_1,xlab = 'Predicted probability',ylab = 'Actual Probability',xlim = c(0,1),ylim =c(0,1),subtitles=T,riskdist = T,cex.subtitles = 0.6)
+dev.off()
+
+cali_train_2<-calibrate(lrm(death~admission_type+sofa+wbc+bmi,data = train,x=T,y=T),method = 'boot',B = 1000)
+
+tiff(filename = 'cali_t_b.tiff',height = 2400,width = 3200,units = 'px',res = 600)
+plot(cali_train_2,xlab = 'Predicted probability',ylab = 'Actual Probability',xlim = c(0,1),ylim =c(0,1),subtitles=T,riskdist = T,cex.subtitles = 0.6)
+dev.off()
+
+##构建列线图预测院内死亡风险
+dd<-datadist(train)
+options(datadist='dd')
+x<-lrm(death~admission_type+sofa+elixhauser_sid30+wbc+bmi,data = train,x=T,y=T)
+
+tiff(filename = 'nomogram.tiff',height = 3200,width = 6400,units = 'px',res = 600)
+plot(nomogram(x,fun=plogis, lp=T, fun.at=c(0.05,0.1,0.2,0.4,0.6,0.8,0.9,0.95),funlabel="In-hospital Death Risk"))
+dev.off()
+
+##绘制决策（DCA）曲线
+
+deci_train<-decision_curve(death~admission_type+sofa+elixhauser_sid30+wbc+bmi,data = train,
+                           family = binomial(link = 'logit'),thresholds = seq(0,1,by=0.01),confidence.intervals = 0.95)
+deci_train_1<-decision_curve(death~elixhauser_sid30,data = train,
+                             family = binomial(link = 'logit'),thresholds = seq(0,1,by=0.01),confidence.intervals = 0.95)
+deci_train_2<-decision_curve(death~admission_type+sofa+wbc+bmi,data = train,
+                             family = binomial(link = 'logit'),thresholds = seq(0,1,by=0.01),confidence.intervals = 0.95)
+tiff(filename = 'DCA_T.tiff',height = 3200,width = 6400,units = 'px',res = 600)
+plot_decision_curve(list(deci_train_1,deci_train_2,deci_train),curve.names = c("Model A","Model B","Model C"),col = c('blue','orange','red'),cost.benefit.axis = T,confidence.intervals = F,lwd=c(1,1,1),lty = c(1,1,1))
+dev.off()
+
+
+##验证集3个模型
+pre_validation<-predict(newdata=validation,fit,"response")
+model2<-roc(death~pre_validation,data=validation,smooth=F)
+plot(model2,print.auc=T,print.thres=T,main = "ROC CURVE", col= "blue",print.thres.col="blue",identity.col="blue",
+     identity.lty=1,identity.lwd=1)
+
+pre_validation_1<-predict(newdata=validation,fit_1,"response")
+model2_1<-roc(death~pre_validation_1,data=validation,smooth=F)
+plot(model2_1,print.auc=T,print.thres=T,main = "ROC CURVE", col= "blue",print.thres.col="blue",identity.col="blue",
+     identity.lty=1,identity.lwd=1)
+
+pre_validation_2<-predict(newdata=validation,fit_2,"response")
+model2_2<-roc(death~pre_validation_2,data=validation,smooth=F)
+plot(model2_2,print.auc=T,print.thres=T,main = "ROC CURVE", col= "blue",print.thres.col="blue",identity.col="blue",
+     identity.lty=1,identity.lwd=1)
+
+roc.test(model2,model2_1)
+
+##验证集3个模型画1个图
+
+tiff(filename = 'validation_roc.tiff',height = 2400,width = 2400,units = 'px',res = 600)
+plot.roc(validation$death,pre_validation_1,main = "Validation Cohort",col='gray',legacy.axes=T,lwd=1,lty=1)
+lines.roc(validation$death,pre_validation_2,col='orange',legacy.axes=T,lwd=1,lty=1)
+lines.roc(validation$death,pre_validation,col='red',legacy.axes=T,lwd=1,lty=1)
+legend('bottomright',bty='n',legend = c('Model A AUC= 0.696','Model B AUC= 0.833','Model C AUC= 0.835'),col = c('gray','orange','red'),
+       cex = 0.5,pt.cex = 0.5,lty = c(1,1,1),lwd=1)
+dev.off()
+
+##验证集，绘制校准曲线
+
+cali_validation<-calibrate(lrm(death~admission_type+sofa+elixhauser_sid30+wbc+bmi,data = validation,x=T,y=T),method = 'boot',B = 1000)
+
+tiff(filename = 'cali_v_c.tiff',height = 2400,width = 3200,units = 'px',res = 600)
+plot(cali_validation,xlab = 'Predicted probability',ylab = 'Actual Probability',xlim = c(0,1),ylim =c(0,1),subtitles=T,riskdist = T,cex.subtitles = 0.6)
+dev.off()
+
+cali_validation_1<-calibrate(lrm(death~elixhauser_sid30,data = validation,x=T,y=T),method = 'boot',B = 1000)
+
+tiff(filename = 'cali_v_a.tiff',height = 2400,width = 3200,units = 'px',res = 600)
+plot(cali_validation_1,xlab = 'Predicted probability',ylab = 'Actual Probability',xlim = c(0,1),ylim =c(0,1),subtitles=T,riskdist = T,cex.subtitles = 0.6)
+dev.off()
+
+cali_validation_2<-calibrate(lrm(death~admission_type+sofa+wbc+bmi,data = validation,x=T,y=T),method = 'boot',B = 1000)
+
+tiff(filename = 'cali_v_b.tiff',height = 2400,width = 3200,units = 'px',res = 600)
+plot(cali_validation_2,xlab = 'Predicted probability',ylab = 'Actual Probability',xlim = c(0,1),ylim =c(0,1),subtitles=T,riskdist = T,cex.subtitles = 0.6)
+dev.off()
+
+##验证集，绘制决策（DCA）曲线
+
+deci_validation<-decision_curve(death~admission_type+sofa+elixhauser_sid30+wbc+bmi,data = validation,
+                           family = binomial(link = 'logit'),thresholds = seq(0,1,by=0.01),confidence.intervals = 0.95)
+deci_validation_1<-decision_curve(death~elixhauser_sid30,data = validation,
+                             family = binomial(link = 'logit'),thresholds = seq(0,1,by=0.01),confidence.intervals = 0.95)
+deci_validation_2<-decision_curve(death~admission_type+sofa+wbc+bmi,data = validation,
+                             family = binomial(link = 'logit'),thresholds = seq(0,1,by=0.01),confidence.intervals = 0.95)
+
+tiff(filename = 'DCA_v.tiff',height = 3200,width = 6400,units = 'px',res = 600)
+plot_decision_curve(list(deci_validation_1,deci_validation_2,deci_validation),curve.names = c("Model A","Model B","Model C"),col = c('blue','orange','red'),cost.benefit.axis = T,confidence.intervals = F,lwd=c(1,1,1),lty = c(1,1,1))
+dev.off()
+
+#将训练集和验证集合并
+
+train_c<-train
+train_c$group<-c(rep(1,572))
+
+validation_c<-validation
+validation_c$group<-c(rep(2,241))
+
+new<-rbind(train_c,validation_c)
+
+#对分类变量进行卡方检验
+chisq.test(new$gender,y =new$group)
+chisq.test(new$ethnicity_grouped,y =new$group)
+chisq.test(new$marital_status,y =new$group)
+chisq.test(new$insurance,y =new$group)
+chisq.test(new$admission_type,y =new$group)
+chisq.test(new$death,y =new$group)
+
+#对计量资料进行非参数秩和检验（计量资料均不符合正态分布）
+
+wilcox.test(new$age~new$group)
+wilcox.test(new$sofa~new$group)
+wilcox.test(new$saps~new$group)
+wilcox.test(new$elixhauser_sid30~new$group)
+wilcox.test(new$bmi~new$group)
+wilcox.test(new$ph~new$group)
+wilcox.test(new$po2~new$group)
+wilcox.test(new$pco2~new$group)
+wilcox.test(new$cre~new$group)
+wilcox.test(new$bun~new$group)
+wilcox.test(new$wbc~new$group)
+wilcox.test(new$hr~new$group)
